@@ -1,0 +1,46 @@
+# Example configuration for sparkly_pipeline
+# Copy this file to config.yaml and edit the paths before running:
+#
+# cp config_example.yaml config.yaml
+
+TASKS:
+  rna_to_msi_example:
+    # AnnData file used as input features
+    input_rna: /path/to/prepared_rna.h5ad
+
+    # AnnData file used as prediction target
+    input_metabolomics: /path/to/prepared_msi.h5ad
+
+    # Column in .obs containing train/test labels
+    # Expected values: "train" and "test"
+    split: split_random_80_20
+
+    methods:
+      ridge:
+        params: params/ridge_params.tsv
+
+      lasso:
+        params: params/lasso_params.tsv
+
+      linear:
+        params: params/linreg_params.tsv
+
+      elastic_net:
+        params: params/elastic_net_params.tsv
+
+      xgboost:
+        params: params/xgboost_params.tsv
+
+  msi_to_rna_example:
+  # The key names are historical:
+  # input_rna is treated as the input feature matrix.
+  # input_metabolomics is treated as the prediction target.
+  input_rna: /path/to/prepared_msi.h5ad
+  input_metabolomics: /path/to/prepared_rna.h5ad
+  split: split_random_80_20
+
+  methods:
+    ridge:
+      params: params/ridge_params.tsv
+    xgboost:
+      params: params/xgboost_params.tsv
