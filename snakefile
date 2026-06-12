@@ -32,28 +32,32 @@ def task_rows(task):
     return tasks_df[tasks_df["task"].astype(str).str.strip() == str(task).strip()]
 
 
+# Methods that should run on a GPU partition (deep / boosted models).
+GPU_METHODS = {"xgboost", "gcn", "graphsage"}
+
+
 def run_partition(wildcards):
-    return "gpu_p" if str(wildcards.method).strip() == "xgboost" else "cpu_p"
+    return "gpu_p" if str(wildcards.method).strip() in GPU_METHODS else "cpu_p"
 
 
 def run_qos(wildcards):
-    return "gpu_normal" if str(wildcards.method).strip() == "xgboost" else "cpu_normal"
+    return "gpu_normal" if str(wildcards.method).strip() in GPU_METHODS else "cpu_normal"
 
 
 def run_gres(wildcards):
-    return "--gres=gpu:1" if str(wildcards.method).strip() == "xgboost" else ""
+    return "--gres=gpu:1" if str(wildcards.method).strip() in GPU_METHODS else ""
 
 
 def run_cpus(wildcards):
-    return 8 if str(wildcards.method).strip() == "xgboost" else 8
+    return 8 if str(wildcards.method).strip() in GPU_METHODS else 8
 
 
 def run_mem_mb(wildcards):
-    return 96000 if str(wildcards.method).strip() == "xgboost" else 32000
+    return 96000 if str(wildcards.method).strip() in GPU_METHODS else 32000
 
 
 def run_time(wildcards):
-    return "08:00:00" if str(wildcards.method).strip() == "xgboost" else "04:00:00"
+    return "08:00:00" if str(wildcards.method).strip() in GPU_METHODS else "04:00:00"
 
 
 rule all:
@@ -82,7 +86,7 @@ rule all:
         expand("data/reports/{task}/merged_global_metrics.tsv", task=unique_tasks),
         expand("data/reports/{task}/merged_per_metabolite_metrics.parquet", task=unique_tasks),
         expand("data/reports/{task}/best_models.tsv", task=unique_tasks),
-        expand("data/reports/{task}/model_report.html", task=unique_tasks),
+        expand("data/reports/{task}/{task}_model_report.html", task=unique_tasks),
 
 
 rule run_method:
@@ -205,6 +209,6 @@ rule report:
         per_metabolite_metrics="data/reports/{task}/merged_per_metabolite_metrics.parquet",
         best_models="data/reports/{task}/best_models.tsv",
     output:
-        html="data/reports/{task}/model_report.html"
+        html="data/reports/{task}/{task}_model_report.html"
     script:
         "scripts/model_report.py"

@@ -31,6 +31,14 @@ TASKS:
       xgboost:
         params: params/xgboost_params.tsv
 
+      # Graph neural networks (require torch + torch_geometric, e.g. gnn-env).
+      # First version supports within-split graph learning only.
+      gcn:
+        params: params/gcn_params.tsv
+
+      graphsage:
+        params: params/graphsage_params.tsv
+
   msi_to_rna_example:
   # The key names are historical:
   # input_rna is treated as the input feature matrix.

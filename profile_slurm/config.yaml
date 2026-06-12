@@ -11,7 +11,7 @@ default-resources:
   - time='08:00:00'
 
 jobs: 16
-keep-going: False
+keep-going: True
 keep-incomplete: False
 printshellcmds: True
 scheduler: greedy

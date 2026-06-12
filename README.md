@@ -11,6 +11,8 @@ The pipeline currently supports:
 - Lasso Regression
 - Elastic Net
 - XGBoost
+- GCN (graph neural network; requires torch + torch_geometric)
+- GraphSAGE (graph neural network; requires torch + torch_geometric)
 
 It trains the selected models, computes global and per-metabolite metrics, merges the results, selects the best models, and generates an HTML report.
 
@@ -74,7 +76,57 @@ python -c "import cupy as cp; print(cp.cuda.runtime.getDeviceCount())"
 
 ### Optional GNN dependencies
 
-The current baseline pipeline does not require PyTorch. For future GNN/cVAE development, install PyTorch separately after creating the environment.
+The baseline (non-GNN) models do not require PyTorch. The `gcn` and
+`graphsage` methods do: torch and torch_geometric are imported lazily, so the
+other methods keep working without them, but a torch-capable environment
+(e.g. the `gnn-env` conda env) is needed to run the GNN methods. These methods
+currently support only within-split graph learning (train graph from the train
+slice, validation drawn only from train, test graph from the test slice; no
+train-test edges). Install PyTorch separately after creating the environment.
+
+Validation is carved from the train nodes via `val_strategy` (in the GNN
+params TSVs): `spatial_band` (default) holds out a contiguous coordinate band
+(the `val_fraction` slab along `val_axis`, where `val_axis="auto"` picks the
+axis of largest spatial extent), which keeps the induced validation subgraph
+connected so early stopping has a meaningful signal; `random` reproduces a
+random hold-out for comparison. For a spatial test split (e.g.
+`split_spatial_y_median`), setting `val_axis` to that same axis makes the
+validation hold-out a closer proxy for the test distribution shift.
+
+#### Graph construction
+
+The GNN methods build a spatial graph **per split** (within-split scope), so
+there are never edges between train and test nodes. The graph is controlled
+by `graph_source` in the GNN params TSVs:
+
+- `obsp` — reuse a precomputed connectivity matrix from `adata.obsp[obsp_key]`
+  (default `obsp_key = spatial_connectivities`). When AnnData is sliced into
+  train/test, cross-split edges are dropped automatically, so each slice keeps
+  only its within-split connectivity.
+- `radius_capped_knn` — rebuild the graph from the spatial coordinates in
+  `adata.obsm['spatial']`. A `knn_k`-nearest-neighbor graph is capped by a
+  distance threshold so long, spurious edges across gaps are removed. The
+  threshold is set by `radius_strategy` (`kth_neighbor_percentile`): take the
+  `radius_percentile` of each node's k-th neighbor distance, then allow edges
+  up to `max_radius_multiplier ×` that radius. If `repair_isolates = 1`, any
+  node left with no edges is reconnected to its nearest neighbor so the graph
+  has no isolated nodes.
+
+For each run, the resolved graph is profiled and the QC statistics are written
+into `run_metadata.json` under `model_metadata` (per split: `n_nodes`,
+`n_edges`, `mean_degree`, `isolated_nodes`, `n_components`,
+`giant_component_fraction`, `median_edge_length`), so graph health can be
+inspected alongside the metrics.
+
+#### GNN hyperparameters
+
+The remaining columns in `params/gcn_params.tsv` and
+`params/graphsage_params.tsv` configure the model and training loop:
+`hidden_dim`, `num_layers`, `dropout`, `lr`, `weight_decay`, `epochs`,
+`patience` (early-stopping patience on validation loss), `standardize` (fit a
+`StandardScaler` on the train-fit nodes only), and `seed`. GraphSAGE adds
+`aggr` (neighbor aggregation, e.g. `mean` or `max`). Models are trained with
+MSE loss and the Adam optimizer on GPU when available, otherwise CPU.
 
 For example, for CUDA 12.6:
 
@@ -184,13 +236,13 @@ The task-level outputs include:
 merged_global_metrics.tsv
 merged_per_metabolite_metrics.parquet
 best_models.tsv
-model_report.html
+{task}_model_report.html
 ```
 
 The main file to open after the run is:
 
 ```text
-data/reports/{task}/model_report.html
+data/reports/{task}/{task}_model_report.html
 ```
 
 This report summarizes model performance and selected top models.

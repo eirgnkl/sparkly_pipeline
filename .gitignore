@@ -17,3 +17,5 @@ __pycache__/
 *.err
 slurm-*.out
 .DS_Store
+docs/
+.smk_scratch/

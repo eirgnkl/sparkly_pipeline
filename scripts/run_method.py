@@ -9,6 +9,8 @@ from linear import run_linreg
 from lasso import run_lasso
 from mxgboost import run_xgboost
 from elastic_net import run_elastic_net
+from gcn import run_gcn
+from graphsage import run_graphsage
 from model_utils import (
     compute_global_metrics,
     compute_per_metabolite_metrics,
@@ -23,6 +25,8 @@ METHOD_MAP = {
     "linear": dict(function=run_linreg, mode="paired"),
     "xgboost": dict(function=run_xgboost, mode="paired"),
     "elastic_net": dict(function=run_elastic_net, mode="paired"),
+    "gcn": dict(function=run_gcn, mode="paired"),
+    "graphsage": dict(function=run_graphsage, mode="paired"),
 }
 
 
@@ -150,6 +154,13 @@ metadata = {
         "run_metadata": str(snakemake.output.run_metadata),
     },
 }
+
+# Merge optional model-provided metadata (e.g. GCN/GraphSAGE graph + training
+# details) without clobbering the core metadata fields above.
+model_metadata = result.get("metadata") if isinstance(result, dict) else None
+if model_metadata:
+    metadata["model_metadata"] = model_metadata
+
 save_json(snakemake.output.run_metadata, metadata)
 
 # Optional compressed prediction storage. This is intentionally disabled by default
