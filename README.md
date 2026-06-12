@@ -140,7 +140,7 @@ To run MSI → RNA, switch the file paths.
 
 ## Running locally
 
-First check the planned jobs:
+First check the planned jobs, via dry run:
 
 ```bash
 snakemake -n -p
