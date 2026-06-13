@@ -79,10 +79,26 @@ python -c "import cupy as cp; print(cp.cuda.runtime.getDeviceCount())"
 The baseline (non-GNN) models do not require PyTorch. The `gcn` and
 `graphsage` methods do: torch and torch_geometric are imported lazily, so the
 other methods keep working without them, but a torch-capable environment
-(e.g. the `gnn-env` conda env) is needed to run the GNN methods. These methods
-currently support only within-split graph learning (train graph from the train
-slice, validation drawn only from train, test graph from the test slice; no
-train-test edges). Install PyTorch separately after creating the environment.
+(e.g. the `gnn-env` conda env) is needed to run the GNN methods. The GNN
+methods support two graph scopes, selected via `graph_scope` in the params TSV
+(see "Graph scope" below). Install PyTorch separately after creating the
+environment.
+
+**Already running the pipeline (baselines/XGBoost) and just adding the GNNs?**
+You only need to add two packages to your existing pipeline environment — the
+data paths, slurm profile and `gpu_p` GPU path you already use for XGBoost are
+unchanged:
+
+```bash
+# into your existing env; pick the cuXXX matching your cluster CUDA driver
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+pip install torch_geometric==2.7.0   # pure-Python; no torch-scatter/sparse needed
+```
+
+Reference working versions: `torch==2.5.1+cu121`, `torch_geometric==2.7.0`. If
+these are missing, only the `gcn`/`graphsage` jobs fail (with a clear
+ImportError); with `keep-going: True` in the slurm profile every non-GNN job
+and the report still complete.
 
 Validation is carved from the train nodes via `val_strategy` (in the GNN
 params TSVs): `spatial_band` (default) holds out a contiguous coordinate band
@@ -95,14 +111,17 @@ validation hold-out a closer proxy for the test distribution shift.
 
 #### Graph construction
 
-The GNN methods build a spatial graph **per split** (within-split scope), so
-there are never edges between train and test nodes. The graph is controlled
-by `graph_source` in the GNN params TSVs:
+The GNN methods build a spatial graph whose relationship to the train/test
+split is set by `graph_scope` (see "Graph scope" below): `within_split` builds
+an independent graph per slice (no train-test edges), while `transductive`
+builds one graph over all nodes. The graph itself is controlled by
+`graph_source` in the GNN params TSVs:
 
 - `obsp` — reuse a precomputed connectivity matrix from `adata.obsp[obsp_key]`
-  (default `obsp_key = spatial_connectivities`). When AnnData is sliced into
-  train/test, cross-split edges are dropped automatically, so each slice keeps
-  only its within-split connectivity.
+  (default `obsp_key = spatial_connectivities`). In `within_split` scope, when
+  AnnData is sliced into train/test the cross-split edges are dropped
+  automatically so each slice keeps only its within-split connectivity; in
+  `transductive` scope the full connectivity is used.
 - `radius_capped_knn` — rebuild the graph from the spatial coordinates in
   `adata.obsm['spatial']`. A `knn_k`-nearest-neighbor graph is capped by a
   distance threshold so long, spurious edges across gaps are removed. The
@@ -113,20 +132,56 @@ by `graph_source` in the GNN params TSVs:
   has no isolated nodes.
 
 For each run, the resolved graph is profiled and the QC statistics are written
-into `run_metadata.json` under `model_metadata` (per split: `n_nodes`,
-`n_edges`, `mean_degree`, `isolated_nodes`, `n_components`,
-`giant_component_fraction`, `median_edge_length`), so graph health can be
-inspected alongside the metrics.
+into `run_metadata.json` under `model_metadata` (`n_nodes`, `n_edges`,
+`mean_degree`, `isolated_nodes`, `n_components`, `giant_component_fraction`,
+`median_edge_length`), so graph health can be inspected alongside the metrics.
+The QC is keyed by the train/test graphs for `within_split`, and by
+`full`/`train_fit`/`val`/`test` for `transductive` (which also records
+`frac_test_nodes_with_train_neighbor`).
 
 #### GNN hyperparameters
 
-The remaining columns in `params/gcn_params.tsv` and
-`params/graphsage_params.tsv` configure the model and training loop:
+The GNN param grids are **split-specific**, since the right configuration
+depends on the split: use `params/gcn_params_random.tsv` /
+`params/graphsage_params_random.tsv` for random splits (these hold
+`transductive` rows with `val_strategy=random` plus a `within_split` ablation),
+and `params/gcn_params_spatial.tsv` / `params/graphsage_params_spatial.tsv` for
+spatial holdout splits (`within_split` / inductive, `val_strategy=spatial_band`,
+with diversified graph construction). The remaining columns in these files
+configure the model and training loop:
 `hidden_dim`, `num_layers`, `dropout`, `lr`, `weight_decay`, `epochs`,
 `patience` (early-stopping patience on validation loss), `standardize` (fit a
 `StandardScaler` on the train-fit nodes only), and `seed`. GraphSAGE adds
 `aggr` (neighbor aggregation, e.g. `mean` or `max`). Models are trained with
 MSE loss and the Adam optimizer on GPU when available, otherwise CPU.
+
+#### Graph scope (inductive vs transductive)
+
+`graph_scope` selects how the graph relates to the train/test split:
+
+- `within_split` (default, inductive): the train graph is built from the train
+  slice and the test graph from the test slice, independently, with no
+  train-test edges. The model never aggregates from labeled train neighbors at
+  inference. This is the right choice for spatial holdout splits, where train
+  and test cover different tissue regions.
+- `transductive`: a single graph is built over all nodes (train + test). The
+  training loss is masked to the train-fit nodes, validation/early-stopping
+  uses train-only held-out nodes, and test predictions are read out from nodes
+  that can aggregate messages from their labeled train neighbors. This is the
+  setting where a GNN can exploit neighborhood structure on a non-spatial
+  (e.g. random 80/20) split, which `within_split` structurally cannot do.
+
+Important caveat for `transductive`: test-node *features* (RNA) participate in
+message passing during training, although test-node *labels* (MSI) are never
+used for the loss, validation, early stopping or model selection. This is
+standard semi-supervised GNN practice, but it is a different evaluation regime
+than the inductive baselines (linear / XGBoost / `within_split` GNN), which
+never see test features. Runs are tagged in `run_metadata.json` with
+`uses_test_features_in_message_passing` and
+`frac_test_nodes_with_train_neighbor` so the regime is explicit; to isolate the
+value of transduction, run both scopes on the same split and compare. Note that
+`transductive` requires the unsliced AnnData, which `run_method.py` passes
+automatically for the GNN methods.
 
 For example, for CUDA 12.6:
 
@@ -155,7 +210,7 @@ PY
 Copy the example config:
 
 ```bash
-cp config.example.yaml config.yaml
+cp config_example.yaml config.yaml
 ```
 
 Then edit `config.yaml` with the paths to your local `.h5ad` files.
@@ -264,6 +319,14 @@ For Slurm usage:
 ```bash
 snakemake --profile profile_slurm
 ```
+
+The provided `profile_slurm/config.yaml` is **cluster-specific**: before using
+it, edit the partition / QoS / GRES names (`partition`, `qos`, `gres`), the
+`--exclude` node list, and the per-rule resources in `snakefile` (the
+`GPU_METHODS` set routes `xgboost`/`gcn`/`graphsage` to the GPU partition) to
+match your cluster. After a code change, snakemake re-runs all jobs by default;
+add `--rerun-triggers mtime` to reuse existing results and only compute new
+runs.
 
 ---
 

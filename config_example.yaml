@@ -32,23 +32,25 @@ TASKS:
         params: params/xgboost_params.tsv
 
       # Graph neural networks (require torch + torch_geometric, e.g. gnn-env).
-      # First version supports within-split graph learning only.
+      # Param grids are split-specific: *_random.tsv (transductive +
+      # within_split ablation) for random splits; *_spatial.tsv (within_split
+      # / inductive) for spatial holdout splits. This task uses a random split.
       gcn:
-        params: params/gcn_params.tsv
+        params: params/gcn_params_random.tsv
 
       graphsage:
-        params: params/graphsage_params.tsv
+        params: params/graphsage_params_random.tsv
 
   msi_to_rna_example:
-  # The key names are historical:
-  # input_rna is treated as the input feature matrix.
-  # input_metabolomics is treated as the prediction target.
-  input_rna: /path/to/prepared_msi.h5ad
-  input_metabolomics: /path/to/prepared_rna.h5ad
-  split: split_random_80_20
+    # The key names are historical:
+    # input_rna is treated as the input feature matrix.
+    # input_metabolomics is treated as the prediction target.
+    input_rna: /path/to/prepared_msi.h5ad
+    input_metabolomics: /path/to/prepared_rna.h5ad
+    split: split_random_80_20
 
-  methods:
-    ridge:
-      params: params/ridge_params.tsv
-    xgboost:
-      params: params/xgboost_params.tsv
+    methods:
+      ridge:
+        params: params/ridge_params.tsv
+      xgboost:
+        params: params/xgboost_params.tsv
