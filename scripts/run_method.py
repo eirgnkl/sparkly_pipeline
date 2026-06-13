@@ -25,8 +25,8 @@ METHOD_MAP = {
     "linear": dict(function=run_linreg, mode="paired"),
     "xgboost": dict(function=run_xgboost, mode="paired"),
     "elastic_net": dict(function=run_elastic_net, mode="paired"),
-    "gcn": dict(function=run_gcn, mode="paired"),
-    "graphsage": dict(function=run_graphsage, mode="paired"),
+    "gcn": dict(function=run_gcn, mode="paired", needs_full_graph=True),
+    "graphsage": dict(function=run_graphsage, mode="paired", needs_full_graph=True),
 }
 
 
@@ -53,6 +53,7 @@ else:
     method_params = ast.literal_eval(raw_method_params)
 
 method_function = METHOD_MAP[method]["function"]
+needs_full_graph = bool(METHOD_MAP[method].get("needs_full_graph", False))
 
 adata_rna = sc.read_h5ad(rna_path)
 adata_msi = sc.read_h5ad(metab_path)
@@ -90,6 +91,17 @@ adata_rna_test = adata_rna[test_mask, :]
 adata_msi_train = adata_msi[train_mask, :]
 adata_msi_test = adata_msi[test_mask, :]
 
+# Graph methods may need the full (unsliced) AnnData + masks for transductive
+# learning (one graph over train+test, with a masked training loss).
+extra_kwargs = {}
+if needs_full_graph:
+    extra_kwargs.update(
+        adata_rna_full=adata_rna,
+        adata_msi_full=adata_msi,
+        train_mask=train_mask,
+        test_mask=test_mask,
+    )
+
 result = method_function(
     adata_rna_train=adata_rna_train,
     adata_rna_test=adata_rna_test,
@@ -98,6 +110,7 @@ result = method_function(
     params=method_params,
     rna_layer=rna_layer,
     msi_layer=msi_layer,
+    **extra_kwargs,
 )
 
 Y_train = result["Y_train"]

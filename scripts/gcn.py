@@ -12,10 +12,14 @@ slice. No train-test edges are used.
 
 from graph_utils import (
     assemble_outputs,
+    assemble_outputs_transductive,
     build_metadata,
+    prepare_transductive,
     prepare_within_split,
+    require_full_graph_kwargs,
     resolve_config,
     train_node_regressor,
+    train_node_regressor_transductive,
 )
 
 
@@ -74,15 +78,29 @@ def run_gcn(
 
     cfg = resolve_config(params, architecture="gcn")
 
-    prep = prepare_within_split(
-        adata_rna_train,
-        adata_rna_test,
-        adata_msi_train,
-        adata_msi_test,
-        cfg,
-        rna_layer=rna_layer,
-        msi_layer=msi_layer,
-    )
+    transductive = cfg["graph_scope"] == "transductive"
+
+    if transductive:
+        full = require_full_graph_kwargs(kwargs, method="gcn")
+        prep = prepare_transductive(
+            full["adata_rna_full"],
+            full["adata_msi_full"],
+            full["train_mask"],
+            full["test_mask"],
+            cfg,
+            rna_layer=rna_layer,
+            msi_layer=msi_layer,
+        )
+    else:
+        prep = prepare_within_split(
+            adata_rna_train,
+            adata_rna_test,
+            adata_msi_train,
+            adata_msi_test,
+            cfg,
+            rna_layer=rna_layer,
+            msi_layer=msi_layer,
+        )
 
     model = _build_model(
         in_dim=prep["n_features"],
@@ -92,8 +110,14 @@ def run_gcn(
         dropout=cfg["dropout"],
     )
 
-    train_result = train_node_regressor(model, prep, cfg, device=kwargs.get("device"))
+    if transductive:
+        train_result = train_node_regressor_transductive(
+            model, prep, cfg, device=kwargs.get("device")
+        )
+        outputs = assemble_outputs_transductive(prep, train_result)
+    else:
+        train_result = train_node_regressor(model, prep, cfg, device=kwargs.get("device"))
+        outputs = assemble_outputs(prep, train_result)
 
-    outputs = assemble_outputs(prep, train_result)
     outputs["metadata"] = build_metadata(prep, train_result, architecture="gcn")
     return outputs
