@@ -5,3 +5,6 @@ id	graph_source	obsp_key	knn_k	radius_strategy	radius_percentile	max_radius_mult
 3	radius_capped_knn	spatial_connectivities	6	kth_neighbor_percentile	90	5	1	within_split	128	2	0.2	0.005	0.0001	500	40	0.15	spatial_band	auto	1	666
 4	radius_capped_knn	spatial_connectivities	6	kth_neighbor_percentile	90	5	1	within_split	256	2	0.2	0.005	0.0001	500	40	0.15	spatial_band	auto	1	666
 5	radius_capped_knn	spatial_connectivities	6	kth_neighbor_percentile	90	5	1	within_split	256	3	0.3	0.005	0.0001	500	40	0.15	spatial_band	auto	1	666
+6	radius_capped_knn	spatial_connectivities	10	kth_neighbor_percentile	90	5	1	within_split	256	2	0.2	0.005	0.0001	500	40	0.15	spatial_band	auto	1	666
+7	radius_capped_knn	spatial_connectivities	10	kth_neighbor_percentile	90	5	1	within_split	256	3	0.3	0.005	0.0001	500	40	0.15	spatial_band	auto	1	666
+8	radius_capped_knn	spatial_connectivities	10	kth_neighbor_percentile	75	5	1	within_split	256	2	0.2	0.005	0.0001	500	40	0.15	spatial_band	auto	1	666
