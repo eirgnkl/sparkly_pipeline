@@ -4,7 +4,9 @@ Same function signature as the other model scripts. torch / torch_geometric
 are imported lazily inside ``run_graphsage`` so that importing this module
 never breaks the non-GNN methods when torch is not installed.
 
-First-version scope: within-split graph learning only (see graph_utils).
+Graph scope is selected via `graph_scope` (see graph_utils): within_split
+(inductive, independent train/test graphs) or transductive (one graph over all
+nodes, loss masked to train-fit nodes, early stopping on train-only validation).
 """
 
 from graph_utils import (

@@ -4,10 +4,11 @@ Same function signature as the other model scripts. torch / torch_geometric
 are imported lazily inside ``run_gcn`` so that importing this module never
 breaks the non-GNN methods when torch is not installed.
 
-First-version scope: within-split graph learning only (see graph_utils). The
-train graph is built from the train slice, validation is a held-out subset of
-the train slice, and the test graph is built independently from the test
-slice. No train-test edges are used.
+Graph scope is selected via `graph_scope` (see graph_utils):
+- within_split (inductive): independent train/test graphs, no train-test edges;
+  validation is a held-out subset of the train slice.
+- transductive: one graph over all nodes, loss masked to train-fit nodes,
+  early stopping on train-only validation, predictions read out for test nodes.
 """
 
 from graph_utils import (
